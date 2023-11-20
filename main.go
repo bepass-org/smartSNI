@@ -37,7 +37,7 @@ func LoadConfig(filename string) (*Config, error) {
 
 func findValueByKeyContains(m map[string]string, substr string) (string, bool) {
 	for key, value := range m {
-		if strings.Contains(strings.ToLower(key), strings.ToLower(substr)) {
+		if strings.Contains(strings.ToLower(substr), strings.ToLower(key)) {
 			return value, true
 		}
 	}
@@ -123,7 +123,7 @@ func peekClientHello(reader io.Reader) (*tls.ClientHelloInfo, io.Reader, error) 
 	if err != nil {
 		return nil, nil, err
 	}
-	return hello, io.MultiReader(peekedBytes, reader), nil
+	return hello, peekedBytes, nil
 }
 
 type readOnlyConn struct {
@@ -141,14 +141,24 @@ func (conn readOnlyConn) SetWriteDeadline(t time.Time) error { return nil }
 
 func readClientHello(reader io.Reader) (*tls.ClientHelloInfo, error) {
 	var hello *tls.ClientHelloInfo
+	var wg sync.WaitGroup
 
-	err := tls.Server(readOnlyConn{reader: reader}, &tls.Config{
+	// Set the wait group for one operation (Handshake)
+	wg.Add(1)
+
+	config := &tls.Config{
 		GetConfigForClient: func(argHello *tls.ClientHelloInfo) (*tls.Config, error) {
-			hello = new(tls.ClientHelloInfo)
-			*hello = *argHello
+			hello = argHello // Capture the ClientHelloInfo
+			wg.Done()        // Indicate that the handshake is complete
 			return nil, nil
 		},
-	}).Handshake()
+	}
+
+	tlsConn := tls.Server(readOnlyConn{reader: reader}, config)
+	err := tlsConn.Handshake()
+
+	// Wait for the handshake to be captured
+	wg.Wait()
 
 	if hello == nil {
 		return nil, err
@@ -165,7 +175,7 @@ func handleConnection(clientConn net.Conn) {
 		return
 	}
 
-	clientHello, clientReader, err := peekClientHello(clientConn)
+	clientHello, clientHelloBytes, err := peekClientHello(clientConn)
 	if err != nil {
 		log.Print(err)
 		return
@@ -205,7 +215,8 @@ func handleConnection(clientConn net.Conn) {
 		wg.Done()
 	}()
 	go func() {
-		io.Copy(backendConn, clientReader)
+		io.Copy(backendConn, clientHelloBytes)
+		io.Copy(backendConn, clientConn)
 		backendConn.(*net.TCPConn).CloseWrite()
 		wg.Done()
 	}()
@@ -214,7 +225,7 @@ func handleConnection(clientConn net.Conn) {
 }
 
 func runDOHServer() {
-	limiter := rate.NewLimiter(1, 5) // 1 request per second with a burst size of 5
+	limiter := rate.NewLimiter(100, 500) // 1 request per second with a burst size of 5
 
 	http.HandleFunc("/dns-query", handleDoHRequest(limiter))
 
@@ -224,8 +235,7 @@ func runDOHServer() {
 		WriteTimeout: 10 * time.Second,
 	}
 
-	log.Println("Starting DoH proxy server on :8080...")
-	log.Fatal(server.ListenAndServe())
+	log.Println(server.ListenAndServe())
 }
 
 func main() {
@@ -234,6 +244,8 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 	config = cfg
+
+	log.Println("Starting SSNI proxy server on :443...")
 
 	var wg sync.WaitGroup
 	wg.Add(2)

@@ -1,6 +1,6 @@
 {
-  "host": "gogoli.webhop.me",
+  "host": "<YOUR_HOST>",
   "domains": {
-    "youtube": ""
+    "youtube": "<YOUR_IP>"
   }
 }
