@@ -1,0 +1,4 @@
+build/
+.idea/
+nohup.out
+go.sum
