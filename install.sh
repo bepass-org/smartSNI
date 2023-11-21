@@ -54,7 +54,7 @@ install() {
 
         clear
         read -p "Enter your domain: " domain
-        read -p "Enter the domain names separated by commas (example: google, youtube): " site_list
+        read -p "Enter the domain names separated by commas (example: google,youtube): " site_list
         # Split the input into an array
         IFS=',' read -ra sites <<< "$site_list"
         
