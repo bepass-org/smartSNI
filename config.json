@@ -1,6 +1,7 @@
 {
   "host": "<YOUR_HOST>",
   "domains": {
-    "youtube": "<YOUR_IP>"
+    "youtube": "<YOUR_IP>",
+    "google": "<YOUR_IP>"
   }
 }

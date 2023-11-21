@@ -188,11 +188,6 @@ func handleConnection(clientConn net.Conn) {
 
 	targetHost := strings.ToLower(clientHello.ServerName)
 
-	if !strings.HasSuffix(targetHost, ".internal.example.com") {
-		log.Print("Blocking connection to unauthorized backend")
-		return
-	}
-
 	if targetHost == config.Host {
 		targetHost = net.JoinHostPort(targetHost, "8443")
 	} else {
