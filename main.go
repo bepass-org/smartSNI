@@ -209,9 +209,14 @@ type readOnlyConn struct {
 	reader io.Reader
 }
 
-func (conn readOnlyConn) Read(p []byte) (int, error)         { return conn.reader.Read(p) }
-func (conn readOnlyConn) Write(p []byte) (int, error)        { return 0, io.ErrClosedPipe }
-func (conn readOnlyConn) Close() error                       { return conn.Close() }
+func (conn readOnlyConn) Read(p []byte) (int, error)  { return conn.reader.Read(p) }
+func (conn readOnlyConn) Write(p []byte) (int, error) { return 0, io.ErrClosedPipe }
+func (conn readOnlyConn) Close() error {
+	if tcpConn, ok := conn.reader.(io.Closer); ok {
+		return tcpConn.Close()
+	}
+	return nil
+}
 func (conn readOnlyConn) LocalAddr() net.Addr                { return nil }
 func (conn readOnlyConn) RemoteAddr() net.Addr               { return nil }
 func (conn readOnlyConn) SetDeadline(t time.Time) error      { return nil }
@@ -311,6 +316,11 @@ func runDOHServer(limiter *rate.Limiter) {
 }
 
 func main() {
+	err := os.Setenv("GOGC", "50")
+	if err != nil {
+		log.Fatal(err)
+	} // Set GOGC to 50 to make GC more aggressive
+
 	cfg, err := LoadConfig("config.json")
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
