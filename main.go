@@ -59,7 +59,7 @@ func processDNSQuery(query []byte) ([]byte, error) {
 	}
 
 	domain := msg.Question[0].Name
-	if ip, ok := config.Domains[domain]; ok {
+	if ip, ok := findValueByKeyContains(config.Domains, domain); ok {
 		rr, err := dns.NewRR(domain + " A " + ip)
 		if err != nil {
 			return nil, err
@@ -317,7 +317,7 @@ func main() {
 	}
 	config = cfg
 
-	log.Println("Starting SSNI proxy server on :443...")
+	log.Println("Starting SSNI proxy server on :443, :853...")
 
 	var wg sync.WaitGroup
 	wg.Add(3)
