@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/miekg/dns"
+	"github.com/valyala/fasthttp"
 	"golang.org/x/time/rate"
 	"io"
 	"log"
@@ -75,31 +76,6 @@ func processDNSQuery(query []byte) ([]byte, error) {
 	}
 
 	return msg.Pack()
-}
-
-// handleDoHRequest processes the DoH request with rate limiting.
-func handleDoHRequest(limiter *rate.Limiter) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if !limiter.Allow() {
-			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
-			return
-		}
-
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "Failed to read request body", http.StatusInternalServerError)
-			return
-		}
-
-		dnsResponse, err := processDNSQuery(body)
-		if err != nil {
-			http.Error(w, "Failed to pack DNS response", http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/dns-message")
-		w.Write(dnsResponse)
-	}
 }
 
 // handleDoTConnection handles a single DoT connection.
@@ -210,13 +186,13 @@ type readOnlyConn struct {
 }
 
 func (conn readOnlyConn) Read(p []byte) (int, error)         { return conn.reader.Read(p) }
-func (conn readOnlyConn) Write(p []byte) (int, error)        { return 0, io.ErrClosedPipe }
+func (conn readOnlyConn) Write(_ []byte) (int, error)        { return 0, io.ErrClosedPipe }
 func (conn readOnlyConn) Close() error                       { return conn.Close() }
 func (conn readOnlyConn) LocalAddr() net.Addr                { return nil }
 func (conn readOnlyConn) RemoteAddr() net.Addr               { return nil }
-func (conn readOnlyConn) SetDeadline(t time.Time) error      { return nil }
-func (conn readOnlyConn) SetReadDeadline(t time.Time) error  { return nil }
-func (conn readOnlyConn) SetWriteDeadline(t time.Time) error { return nil }
+func (conn readOnlyConn) SetDeadline(t time.Time) error      { return conn.SetDeadline(t) }
+func (conn readOnlyConn) SetReadDeadline(t time.Time) error  { return conn.SetReadDeadline(t) }
+func (conn readOnlyConn) SetWriteDeadline(t time.Time) error { return conn.SetWriteDeadline(t) }
 
 func readClientHello(reader io.Reader) (*tls.ClientHelloInfo, error) {
 	var hello *tls.ClientHelloInfo
@@ -298,16 +274,44 @@ func handleConnection(clientConn net.Conn) {
 	wg.Wait()
 }
 
-func runDOHServer(limiter *rate.Limiter) {
-	http.HandleFunc("/dns-query", handleDoHRequest(limiter))
+// handleDoHRequest processes the DoH request with rate limiting using fasthttp.
+func handleDoHRequest(ctx *fasthttp.RequestCtx, limiter *rate.Limiter) {
+	if !limiter.Allow() {
+		ctx.Error("Rate limit exceeded", fasthttp.StatusTooManyRequests)
+		return
+	}
 
-	server := &http.Server{
-		Addr:         "127.0.0.1:8080",
+	body := ctx.PostBody()
+
+	dnsResponse, err := processDNSQuery(body)
+	if err != nil {
+		ctx.Error("Failed to process DNS query", fasthttp.StatusInternalServerError)
+		return
+	}
+
+	ctx.SetContentType("application/dns-message")
+	ctx.SetStatusCode(fasthttp.StatusOK)
+	ctx.Write(dnsResponse)
+}
+
+// runDOHServer starts the DNS-over-HTTPS server using fasthttp.
+func runDOHServer(limiter *rate.Limiter) {
+	server := &fasthttp.Server{
+		Handler: func(ctx *fasthttp.RequestCtx) {
+			switch string(ctx.Path()) {
+			case "/dns-query":
+				handleDoHRequest(ctx, limiter)
+			default:
+				ctx.Error("Unsupported path", fasthttp.StatusNotFound)
+			}
+		},
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
 
-	log.Println(server.ListenAndServe())
+	if err := server.ListenAndServe("127.0.0.1:8080"); err != nil {
+		log.Fatalf("Error in DoH Server: %s", err)
+	}
 }
 
 func main() {
