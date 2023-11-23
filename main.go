@@ -276,6 +276,18 @@ func handleConnection(clientConn net.Conn) {
 
 	if err := clientConn.SetReadDeadline(time.Time{}); err != nil {
 		log.Println(err)
+		// HTTP response headers and body
+		response := "HTTP/1.1 502 OK\r\n" +
+			"Content-Type: text/plain; charset=utf-8\r\n" +
+			"Content-Length: 21\r\n" +
+			"\r\n" +
+			"nginx, malformed data"
+
+		// Write the response to the connection
+		_, err := clientConn.Write([]byte(response))
+		if err != nil {
+			log.Println("Error writing response:", err)
+		}
 		return
 	}
 
