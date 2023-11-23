@@ -277,7 +277,7 @@ func handleConnection(clientConn net.Conn) {
 	targetHost := strings.ToLower(clientHello.ServerName)
 
 	if targetHost == config.Host {
-		targetHost = net.JoinHostPort(targetHost, "8443")
+		targetHost = "127.0.0.1:8443"
 	} else {
 		targetHost = net.JoinHostPort(targetHost, "443")
 	}
