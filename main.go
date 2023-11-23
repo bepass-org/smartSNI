@@ -19,8 +19,16 @@ import (
 	"time"
 )
 
-var config *Config
-var limiter *rate.Limiter
+var (
+	// BufferPool for reuse of byte slices
+	BufferPool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, 4096) // Adjust the size according to your needs
+		},
+	}
+	config  *Config
+	limiter *rate.Limiter
+)
 
 // Config represents the structure of the configuration file.
 type Config struct {
@@ -73,7 +81,32 @@ func processDNSQuery(query []byte) ([]byte, error) {
 			return nil, err
 		}
 		defer resp.Body.Close()
-		return io.ReadAll(resp.Body)
+
+		// Use a fixed-size buffer from the pool for the initial read
+		buffer := BufferPool.Get().([]byte)
+		defer BufferPool.Put(buffer)
+
+		// Read the initial chunk of the response
+		n, err := resp.Body.Read(buffer)
+		if err != nil && err != io.EOF {
+			return nil, err
+		}
+
+		// If the buffer was large enough to hold the entire response, return it
+		if n < len(buffer) {
+			return buffer[:n], nil
+		}
+
+		// If the response is larger than our buffer, we need to read the rest
+		// and append to a dynamically-sized buffer
+		var dynamicBuffer bytes.Buffer
+		dynamicBuffer.Write(buffer[:n])
+		_, err = dynamicBuffer.ReadFrom(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		return dynamicBuffer.Bytes(), nil
 	}
 
 	return msg.Pack()
@@ -84,23 +117,33 @@ func handleDoTConnection(conn net.Conn) {
 	defer conn.Close()
 
 	if !limiter.Allow() {
-		// Log rate limit exceeded
+		log.Println("limit exceeded")
 		return
 	}
 
+	// Get a buffer from the pool and put it back after use
+	buffer := BufferPool.Get().([]byte)
+	defer BufferPool.Put(buffer)
+
 	// Read the first two bytes to determine the length of the DNS message
-	lengthBuf := make([]byte, 2)
-	_, err := io.ReadFull(conn, lengthBuf)
+	_, err := io.ReadFull(conn, buffer[:2])
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
 	// Parse the length of the DNS message
-	dnsMessageLength := binary.BigEndian.Uint16(lengthBuf)
+	dnsMessageLength := binary.BigEndian.Uint16(buffer[:2])
 
-	// Allocate a buffer of the size indicated by the length and read the DNS message
-	buffer := make([]byte, dnsMessageLength)
+	// Check if the buffer is large enough to hold the DNS message, otherwise get a larger one
+	if int(dnsMessageLength) > cap(buffer) {
+		buffer = make([]byte, dnsMessageLength)
+		defer BufferPool.Put(buffer[:4096]) // Put back the original buffer size to the pool
+	} else {
+		buffer = buffer[:dnsMessageLength]
+	}
+
+	// Read the DNS message
 	_, err = io.ReadFull(conn, buffer)
 	if err != nil {
 		log.Println(err)
@@ -108,25 +151,14 @@ func handleDoTConnection(conn net.Conn) {
 	}
 
 	// Process the DNS query and generate a response
-	response, err := processDNSQuery(buffer) // Process the full message
+	response, err := processDNSQuery(buffer)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
-	// Prepare the response with the length header
-	responseLength := make([]byte, 2)
-	binary.BigEndian.PutUint16(responseLength, uint16(len(response)))
-
-	// Write the length of the response followed by the response itself
-	_, err = conn.Write(responseLength)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-
-	_, err = conn.Write(response)
-	if err != nil {
+	// Write response
+	if _, err := conn.Write(response); err != nil {
 		log.Println(err)
 		return
 	}
