@@ -269,7 +269,7 @@ func handleConnection(clientConn net.Conn) {
 		return
 	}
 
-	if clientHello.ServerName == null || strings.TrimSpace(clientHello.ServerName) == "" {
+	if clientHello.ServerName == nil || strings.TrimSpace(clientHello.ServerName) == "" {
 		log.Println("null server name not allowed")
 		return
 	}
