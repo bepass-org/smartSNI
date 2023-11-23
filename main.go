@@ -198,7 +198,7 @@ func serveSniProxy() {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			log.Print(err)
+			log.Println(err)
 			continue
 		}
 		go handleConnection(conn)
@@ -259,18 +259,23 @@ func handleConnection(clientConn net.Conn) {
 	defer clientConn.Close()
 
 	if err := clientConn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		log.Print(err)
+		log.Println(err)
 		return
 	}
 
 	clientHello, clientHelloBytes, err := peekClientHello(clientConn)
 	if err != nil {
-		log.Print(err)
+		log.Println(err)
+		return
+	}
+
+	if clientHello.ServerName == null || strings.TrimSpace(clientHello.ServerName) == "" {
+		log.Println("null server name not allowed")
 		return
 	}
 
 	if err := clientConn.SetReadDeadline(time.Time{}); err != nil {
-		log.Print(err)
+		log.Println(err)
 		return
 	}
 
@@ -284,7 +289,7 @@ func handleConnection(clientConn net.Conn) {
 
 	backendConn, err := net.DialTimeout("tcp", targetHost, 5*time.Second)
 	if err != nil {
-		log.Print(err)
+		log.Println(err)
 		return
 	}
 	defer backendConn.Close()
