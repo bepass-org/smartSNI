@@ -211,7 +211,7 @@ type readOnlyConn struct {
 
 func (conn readOnlyConn) Read(p []byte) (int, error)         { return conn.reader.Read(p) }
 func (conn readOnlyConn) Write(p []byte) (int, error)        { return 0, io.ErrClosedPipe }
-func (conn readOnlyConn) Close() error                       { return nil }
+func (conn readOnlyConn) Close() error                       { return conn.Close() }
 func (conn readOnlyConn) LocalAddr() net.Addr                { return nil }
 func (conn readOnlyConn) RemoteAddr() net.Addr               { return nil }
 func (conn readOnlyConn) SetDeadline(t time.Time) error      { return nil }
@@ -322,7 +322,7 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(3)
 
-	limiter := rate.NewLimiter(100, 500) // 1 request per second with a burst size of 5
+	limiter := rate.NewLimiter(10, 50) // 1 request per second with a burst size of 5
 
 	go func() {
 		runDOHServer(limiter)
