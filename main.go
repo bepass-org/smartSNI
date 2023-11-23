@@ -20,6 +20,7 @@ import (
 )
 
 var config *Config
+var limiter *rate.Limiter
 
 // Config represents the structure of the configuration file.
 type Config struct {
@@ -79,7 +80,7 @@ func processDNSQuery(query []byte) ([]byte, error) {
 }
 
 // handleDoTConnection handles a single DoT connection.
-func handleDoTConnection(conn net.Conn, limiter *rate.Limiter) {
+func handleDoTConnection(conn net.Conn) {
 	defer conn.Close()
 
 	if !limiter.Allow() {
@@ -132,7 +133,7 @@ func handleDoTConnection(conn net.Conn, limiter *rate.Limiter) {
 }
 
 // startDoTServer starts the DNS-over-TLS server.
-func startDoTServer(limiter *rate.Limiter) {
+func startDoTServer() {
 	// Load TLS credentials
 	certPrefix := "/etc/letsencrypt/live/" + config.Host + "/"
 	cer, err := tls.LoadX509KeyPair(certPrefix+"/fullchain.pem", certPrefix+"privkey.pem")
@@ -153,7 +154,7 @@ func startDoTServer(limiter *rate.Limiter) {
 			log.Println(err)
 			continue
 		}
-		go handleDoTConnection(conn, limiter)
+		go handleDoTConnection(conn)
 	}
 }
 
@@ -275,7 +276,7 @@ func handleConnection(clientConn net.Conn) {
 }
 
 // handleDoHRequest processes the DoH request with rate limiting using fasthttp.
-func handleDoHRequest(ctx *fasthttp.RequestCtx, limiter *rate.Limiter) {
+func handleDoHRequest(ctx *fasthttp.RequestCtx) {
 	if !limiter.Allow() {
 		ctx.Error("Rate limit exceeded", fasthttp.StatusTooManyRequests)
 		return
@@ -295,12 +296,12 @@ func handleDoHRequest(ctx *fasthttp.RequestCtx, limiter *rate.Limiter) {
 }
 
 // runDOHServer starts the DNS-over-HTTPS server using fasthttp.
-func runDOHServer(limiter *rate.Limiter) {
+func runDOHServer() {
 	server := &fasthttp.Server{
 		Handler: func(ctx *fasthttp.RequestCtx) {
 			switch string(ctx.Path()) {
 			case "/dns-query":
-				handleDoHRequest(ctx, limiter)
+				handleDoHRequest(ctx)
 			default:
 				ctx.Error("Unsupported path", fasthttp.StatusNotFound)
 			}
@@ -331,14 +332,14 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(3)
 
-	limiter := rate.NewLimiter(10, 50) // 1 request per second with a burst size of 5
+	limiter = rate.NewLimiter(10, 50) // 1 request per second with a burst size of 5
 
 	go func() {
-		runDOHServer(limiter)
+		runDOHServer()
 		wg.Done()
 	}()
 	go func() {
-		startDoTServer(limiter)
+		startDoTServer()
 		wg.Done()
 	}()
 	go func() {
