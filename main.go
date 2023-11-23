@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"github.com/miekg/dns"
 	"golang.org/x/time/rate"
 	"io"
@@ -44,6 +46,37 @@ func findValueByKeyContains(m map[string]string, substr string) (string, bool) {
 	return "", false // Return empty string and false if no key contains the substring
 }
 
+// processDNSQuery processes the DNS query and returns a response.
+func processDNSQuery(query []byte) ([]byte, error) {
+	var msg dns.Msg
+	err := msg.Unpack(query)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(msg.Question) == 0 {
+		return nil, fmt.Errorf("no DNS question found in the request")
+	}
+
+	domain := msg.Question[0].Name
+	if ip, ok := config.Domains[domain]; ok {
+		rr, err := dns.NewRR(domain + " A " + ip)
+		if err != nil {
+			return nil, err
+		}
+		msg.Answer = append(msg.Answer, rr)
+	} else {
+		resp, err := http.Post("https://1.1.1.1/dns-query", "application/dns-message", bytes.NewReader(query))
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		return io.ReadAll(resp.Body)
+	}
+
+	return msg.Pack()
+}
+
 // handleDoHRequest processes the DoH request with rate limiting.
 func handleDoHRequest(limiter *rate.Limiter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -58,40 +91,7 @@ func handleDoHRequest(limiter *rate.Limiter) http.HandlerFunc {
 			return
 		}
 
-		var msg dns.Msg
-		err = msg.Unpack(body)
-		if err != nil {
-			http.Error(w, "Failed to unpack DNS message", http.StatusBadRequest)
-			return
-		}
-
-		if len(msg.Question) == 0 {
-			http.Error(w, "No DNS question found in the request", http.StatusBadRequest)
-			return
-		}
-
-		domain := msg.Question[0].Name
-		if ip, ok := findValueByKeyContains(config.Domains, domain); ok {
-			rr, err := dns.NewRR(domain + " A " + ip)
-			if err != nil {
-				http.Error(w, "Failed to create DNS resource record", http.StatusInternalServerError)
-				return
-			}
-			msg.Answer = append(msg.Answer, rr)
-		} else {
-			resp, err := http.Post("https://1.1.1.1/dns-query", "application/dns-message", bytes.NewReader(body))
-			if err != nil {
-				http.Error(w, "Failed to forward request", http.StatusInternalServerError)
-				return
-			}
-			defer resp.Body.Close()
-			forwardedBody, _ := io.ReadAll(resp.Body)
-			w.Header().Set("Content-Type", "application/dns-message")
-			w.Write(forwardedBody)
-			return
-		}
-
-		dnsResponse, err := msg.Pack()
+		dnsResponse, err := processDNSQuery(body)
 		if err != nil {
 			http.Error(w, "Failed to pack DNS response", http.StatusInternalServerError)
 			return
@@ -99,6 +99,85 @@ func handleDoHRequest(limiter *rate.Limiter) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/dns-message")
 		w.Write(dnsResponse)
+	}
+}
+
+// handleDoTConnection handles a single DoT connection.
+func handleDoTConnection(conn net.Conn, limiter *rate.Limiter) {
+	defer conn.Close()
+
+	if !limiter.Allow() {
+		// Log rate limit exceeded
+		return
+	}
+
+	// Read the first two bytes to determine the length of the DNS message
+	lengthBuf := make([]byte, 2)
+	_, err := io.ReadFull(conn, lengthBuf)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	// Parse the length of the DNS message
+	dnsMessageLength := binary.BigEndian.Uint16(lengthBuf)
+
+	// Allocate a buffer of the size indicated by the length and read the DNS message
+	buffer := make([]byte, dnsMessageLength)
+	_, err = io.ReadFull(conn, buffer)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	// Process the DNS query and generate a response
+	response, err := processDNSQuery(buffer) // Process the full message
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	// Prepare the response with the length header
+	responseLength := make([]byte, 2)
+	binary.BigEndian.PutUint16(responseLength, uint16(len(response)))
+
+	// Write the length of the response followed by the response itself
+	_, err = conn.Write(responseLength)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	_, err = conn.Write(response)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+}
+
+// startDoTServer starts the DNS-over-TLS server.
+func startDoTServer(limiter *rate.Limiter) {
+	// Load TLS credentials
+	certPrefix := "/etc/letsencrypt/live/" + config.Host + "/"
+	cer, err := tls.LoadX509KeyPair(certPrefix+"/fullchain.pem", certPrefix+"privkey.pem")
+	if err != nil {
+		log.Fatal(err)
+	}
+	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cer}}
+
+	listener, err := tls.Listen("tcp", ":853", tlsConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer listener.Close()
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		go handleDoTConnection(conn, limiter)
 	}
 }
 
@@ -219,9 +298,7 @@ func handleConnection(clientConn net.Conn) {
 	wg.Wait()
 }
 
-func runDOHServer() {
-	limiter := rate.NewLimiter(100, 500) // 1 request per second with a burst size of 5
-
+func runDOHServer(limiter *rate.Limiter) {
 	http.HandleFunc("/dns-query", handleDoHRequest(limiter))
 
 	server := &http.Server{
@@ -243,10 +320,16 @@ func main() {
 	log.Println("Starting SSNI proxy server on :443...")
 
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
+
+	limiter := rate.NewLimiter(100, 500) // 1 request per second with a burst size of 5
 
 	go func() {
-		runDOHServer()
+		runDOHServer(limiter)
+		wg.Done()
+	}()
+	go func() {
+		startDoTServer(limiter)
 		wg.Done()
 	}()
 	go func() {
