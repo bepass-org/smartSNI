@@ -71,46 +71,55 @@ func processDNSQuery(query []byte) ([]byte, error) {
 
 	domain := msg.Question[0].Name
 	if ip, ok := findValueByKeyContains(config.Domains, domain); ok {
-		rr, err := dns.NewRR(domain + " A " + ip)
-		if err != nil {
-			return nil, err
+		hdr := dns.RR_Header{
+			Name:   domain,
+			Rrtype: dns.TypeA,
+			Class:  dns.ClassINET,
+			Ttl:    3600, // example TTL
+		}
+		rr := &dns.A{
+			Hdr: hdr,
+			A:   net.ParseIP(ip),
+		}
+		if rr.A == nil {
+			return nil, fmt.Errorf("invalid IP address")
 		}
 		msg.Answer = append(msg.Answer, rr)
-	} else {
-		resp, err := http.Post("https://1.1.1.1/dns-query", "application/dns-message", bytes.NewReader(query))
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-
-		// Use a fixed-size buffer from the pool for the initial read
-		buffer := BufferPool.Get().([]byte)
-		defer BufferPool.Put(buffer)
-
-		// Read the initial chunk of the response
-		n, err := resp.Body.Read(buffer)
-		if err != nil && err != io.EOF {
-			return nil, err
-		}
-
-		// If the buffer was large enough to hold the entire response, return it
-		if n < len(buffer) {
-			return buffer[:n], nil
-		}
-
-		// If the response is larger than our buffer, we need to read the rest
-		// and append to a dynamically-sized buffer
-		var dynamicBuffer bytes.Buffer
-		dynamicBuffer.Write(buffer[:n])
-		_, err = dynamicBuffer.ReadFrom(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-
-		return dynamicBuffer.Bytes(), nil
+		msg.SetReply(&msg) // Set appropriate flags and sections
+		return msg.Pack()
 	}
 
-	return msg.Pack()
+	resp, err := http.Post("https://1.1.1.1/dns-query", "application/dns-message", bytes.NewReader(query))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Use a fixed-size buffer from the pool for the initial read
+	buffer := BufferPool.Get().([]byte)
+	defer BufferPool.Put(buffer)
+
+	// Read the initial chunk of the response
+	n, err := resp.Body.Read(buffer)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+
+	// If the buffer was large enough to hold the entire response, return it
+	if n < len(buffer) {
+		return buffer[:n], nil
+	}
+
+	// If the response is larger than our buffer, we need to read the rest
+	// and append to a dynamically-sized buffer
+	var dynamicBuffer bytes.Buffer
+	dynamicBuffer.Write(buffer[:n])
+	_, err = dynamicBuffer.ReadFrom(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return dynamicBuffer.Bytes(), nil
 }
 
 // handleDoTConnection handles a single DoT connection.
