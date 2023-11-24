@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -284,11 +285,6 @@ func handleConnection(clientConn net.Conn) {
 
 	if strings.TrimSpace(clientHello.ServerName) == "" {
 		log.Println("empty sni not allowed here")
-		return
-	}
-
-	if err := clientConn.SetReadDeadline(time.Time{}); err != nil {
-		log.Println(err)
 		// HTTP response headers and body
 		response := "HTTP/1.1 502 OK\r\n" +
 			"Content-Type: text/plain; charset=utf-8\r\n" +
@@ -344,7 +340,31 @@ func handleDoHRequest(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	body := ctx.PostBody()
+	var body []byte
+	var err error
+
+	switch string(ctx.Method()) {
+	case "GET":
+		dnsQueryParam := ctx.QueryArgs().Peek("dns")
+		if dnsQueryParam == nil {
+			ctx.Error("Missing 'dns' query parameter", fasthttp.StatusBadRequest)
+			return
+		}
+		body, err = base64.RawURLEncoding.DecodeString(string(dnsQueryParam))
+		if err != nil {
+			ctx.Error("Invalid 'dns' query parameter", fasthttp.StatusBadRequest)
+			return
+		}
+	case "POST":
+		body = ctx.PostBody()
+		if len(body) == 0 {
+			ctx.Error("Empty request body", fasthttp.StatusBadRequest)
+			return
+		}
+	default:
+		ctx.Error("Only GET and POST methods are allowed", fasthttp.StatusMethodNotAllowed)
+		return
+	}
 
 	dnsResponse, err := processDNSQuery(body)
 	if err != nil {
