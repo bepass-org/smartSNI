@@ -36,25 +36,23 @@ install_dependencies() {
     done
     
     if ! command -v go &> /dev/null; then
-	    echo "go is not installed. Installing..."
-	    
-	    if dpkg --print-architecture | grep -q "amd64"; then
-	        ARCH="amd64"
-	    elif dpkg --print-architecture | grep -q "arm64"; then
-	        ARCH="arm64"
-	    else
-	        echo "Unsupported architecture: $(dpkg --print-architecture)"
-	        exit 1
-	    fi
-	    
-	    wget https://go.dev/dl/go1.21.6.linux-"$ARCH".tar.gz
-	    rm -rf /usr/local/go && tar -C /usr/local -xzf go1.21.6.linux-"$ARCH".tar.gz
-	    export PATH=$PATH:/usr/local/go/bin
-	    rm -rf https://go.dev/dl/go1.21.6.linux-"$ARCH".tar.gz
-	    echo "go has been installed."
-	else
-	    echo "go is already installed."
-	fi
+        echo "go is not installed. Installing..."
+        
+        ARCH=$(dpkg --print-architecture)
+        
+        if [[ $ARCH == "amd64" || $ARCH == "arm64" ]]; then
+            wget https://golang.org/dl/go1.21.6.linux-"$ARCH".tar.gz
+            tar -C /usr/local -xzf go1.21.6.linux-"$ARCH".tar.gz
+            export PATH=$PATH:/usr/local/go/bin
+            rm go1.21.6.linux-"$ARCH".tar.gz
+            echo "go has been installed."
+        else
+            echo "Unsupported architecture: $ARCH"
+            exit 1
+        fi
+    else
+        echo "go is already installed."
+    fi
 }
 
 #install
