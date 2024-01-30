@@ -1,7 +1,7 @@
 #!/bin/bash
 
+# Function to detect Linux distribution
 detect_distribution() {
-    # Detect the Linux distribution
     local supported_distributions=("ubuntu" "debian" "centos" "fedora")
     
     if [ -f /etc/os-release ]; then
@@ -36,26 +36,31 @@ install_dependencies() {
     done
     
     if ! command -v go &> /dev/null; then
-        echo "go is not installed. Installing..."
-        
-        ARCH=$(dpkg --print-architecture)
-        
-        if [[ $ARCH == "amd64" || $ARCH == "arm64" ]]; then
-            wget https://golang.org/dl/go1.21.6.linux-"$ARCH".tar.gz
-            tar -C /usr/local -xzf go1.21.6.linux-"$ARCH".tar.gz
-            export PATH=$PATH:/usr/local/go/bin
-            rm go1.21.6.linux-"$ARCH".tar.gz
-            echo "go has been installed."
-        else
-            echo "Unsupported architecture: $ARCH"
-            exit 1
-        fi
+        install_go
     else
         echo "go is already installed."
     fi
 }
 
-#install
+# Install Go
+install_go() {
+    echo "go is not installed. Installing..."
+    
+    ARCH=$(dpkg --print-architecture)
+    
+    if [[ $ARCH == "amd64" || $ARCH == "arm64" ]]; then
+        wget https://golang.org/dl/go1.21.6.linux-"$ARCH".tar.gz
+        tar -C /usr/local -xzf go1.21.6.linux-"$ARCH".tar.gz
+        export PATH=$PATH:/usr/local/go/bin
+        rm go1.21.6.linux-"$ARCH".tar.gz
+        echo "go has been installed."
+    else
+        echo "Unsupported architecture: $ARCH"
+        exit 1
+    fi
+}
+
+# install SNI service
 install() {
     if systemctl is-active --quiet sni.service; then
         echo "The SNI service is already installed and active."
@@ -136,7 +141,6 @@ EOL
 
 # Uninstall function
 uninstall() {
-    # Check if the service is installed
     if [ ! -f "/etc/systemd/system/sni.service" ]; then
         echo "The service is not installed."
         return
