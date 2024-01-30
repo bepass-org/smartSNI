@@ -98,10 +98,7 @@ install() {
         # Obtain SSL certificates
         certbot --nginx -d $domain --register-unsafely-without-email --non-interactive --agree-tos --redirect
 
-        # Copy config
         sudo cp /root/smartSNI/nginx.conf "$nginx_conf"
-
-        # Stop and restart nginx
         systemctl stop nginx
         systemctl restart nginx
 
