@@ -65,7 +65,7 @@ install_go() {
         cp /usr/local/go/bin/go /usr/local/bin
         
         rm go1.21.6.linux-"$ARCH".tar.gz
-        rm -rf go
+        rm -rf /root/go
         echo -e "${cyan}Go has been installed.${rest}"
     else
         echo -e "${red}Unsupported architecture: $ARCH${rest}"
