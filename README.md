@@ -50,6 +50,7 @@ You can obtain a valid certificate for your domain with lets encrypt
 ```
 bash <(curl -fsSL https://raw.githubusercontent.com/Ptechgithub/smartSNI/main/install.sh)
 ```
+![19](https://raw.githubusercontent.com/Ptechgithub/configs/main/media/19.jpg)
 
 ## Manual Setup
 
