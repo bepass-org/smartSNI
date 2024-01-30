@@ -150,7 +150,7 @@ EOL
             echo -e "${yellow}____________________________________${rest}"
         else
             echo -e "${yellow}____________________________${rest}"
-            echo -e "${red}The SNI service is not active.${rest}"
+            echo -e "${red}Service is not active.${rest}"
             echo -e "${yellow}____________________________${rest}"
         fi
     fi
