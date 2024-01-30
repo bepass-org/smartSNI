@@ -86,7 +86,7 @@ install() {
         echo -e "${yellow}********************${rest}"
         read -p "Enter your domain: " domain
         echo -e "${yellow}********************${rest}"
-        read -p "Enter domain names separated by commas (example: intel.com,youtube): " site_list
+        read -p "Enter domain names (separated by commas)[example: intel.com,youtube]: " site_list
         echo -e "${yellow}********************${rest}"
         # Split the input into an array
         IFS=',' read -ra sites <<< "$site_list"
