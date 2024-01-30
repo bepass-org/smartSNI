@@ -24,7 +24,7 @@ detect_distribution() {
 install_dependencies() {
     detect_distribution
     $pm update -y
-    local packages=("nginx" "git" "jq" "certbot" "python3-certbot-nginx" "snapd")
+    local packages=("nginx" "git" "jq" "certbot" "python3-certbot-nginx" "wget")
     
     for package in "${packages[@]}"; do
         if ! dpkg -s "$package" &> /dev/null; then
@@ -35,12 +35,15 @@ install_dependencies() {
         fi
     done
     
-    if ! snap list go &> /dev/null; then
-        echo "go is not installed. Installing..."
-        snap install go --classic
-    else
-        echo "go is already installed."
-    fi
+    if ! command -v go &> /dev/null; then
+	    echo "go is not installed. Installing..."
+	    wget https://go.dev/dl/go1.21.6.linux-amd64.tar.gz
+	    rm -rf /usr/local/go && tar -C /usr/local -xzf go1.21.6.linux-amd64.tar.gz
+	    export PATH=$PATH:/usr/local/go/bin
+	    echo "go has been installed."
+	else
+	    echo "go is already installed."
+	fi
 }
 
 #install
