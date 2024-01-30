@@ -145,9 +145,9 @@ EOL
 
         # Check if the service is active
         if systemctl is-active --quiet sni.service; then
-            echo -e "${yellow}____________________________${rest}"
+            echo -e "${yellow}____________________________________${rest}"
             echo -e "${green}Service Installed Successfully and activated.${rest}"
-            echo -e "${yellow}____________________________${rest}"
+            echo -e "${yellow}____________________________________${rest}"
         else
             echo -e "${yellow}____________________________${rest}"
             echo -e "${red}The SNI service is not active.${rest}"
