@@ -195,7 +195,8 @@ display_sites() {
         echo ""
         echo -e "${yellow}********************${rest}"
     else
-        echo -e "${red}Error: Not installed. Please Install first.${rest}"
+        echo -e "${yellow}********************${rest}"
+        echo -e "${red}Not installed. Please Install first.${rest}"
     fi
 }
 
@@ -232,7 +233,8 @@ add_sites() {
         # Restart the service
         systemctl restart sni.service
     else
-        echo -e "${red}Error: Not installed. Please Install first.${rest}"
+        echo -e "${yellow}********************${rest}"
+        echo -e "${red}Not installed. Please Install first.${rest}"
     fi
 }
 
@@ -263,7 +265,8 @@ remove_sites() {
         # Restart the service
         systemctl restart sni.service
     else
-        echo -e "${red}Error: Not installed. Please Install first.${rest}"
+        echo -e "${yellow}********************${rest}"
+        echo -e "${red}Not installed. Please Install first.${rest}"
     fi
 }
 
