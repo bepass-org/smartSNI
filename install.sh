@@ -174,9 +174,9 @@ uninstall() {
     sudo rm /etc/systemd/system/sni.service
     rm -rf /root/smartSNI
     rm -rf /root/go
-    echo -e "${yellow}________________________________${rest}"
+    echo -e "${yellow}____________________________________${rest}"
     echo -e "${green}Uninstallation completed successfully.${rest}"
-    echo -e "${yellow}________________________________${rest}"
+    echo -e "${yellow}____________________________________${rest}"
 }
 
 # Show Websites
