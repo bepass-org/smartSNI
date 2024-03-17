@@ -34,7 +34,7 @@ detect_distribution() {
 install_dependencies() {
     detect_distribution
     $pm update -y
-    local packages=("nginx" "git" "jq" "certbot" "python3-certbot-nginx" "wget" "tar" "golang-go")
+    local packages=("nginx" "git" "jq" "certbot" "python3-certbot-nginx" "wget" "tar")
     
     for package in "${packages[@]}"; do
         if ! dpkg -s "$package" &> /dev/null; then
