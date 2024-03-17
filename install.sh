@@ -76,7 +76,9 @@ install_go() {
 # install SNI service
 install() {
     if systemctl is-active --quiet sni.service; then
+        echo -e "${yellow}********************${rest}"
         echo -e "${green}Service is already installed and active.${rest}"
+        echo -e "${yellow}********************${rest}"
     else
         install_dependencies
         git clone https://github.com/bepass-org/smartSNI.git /root/smartSNI
@@ -202,7 +204,7 @@ check() {
     if systemctl is-active --quiet sni.service; then
         echo -e "${cyan}[Service Actived]${rest}"
     else
-        echo -e "${yellow}[Service Not Installed]${rest}"
+        echo -e "${yellow}[Service Not Active]${rest}"
     fi
 }
 
@@ -306,6 +308,7 @@ case "$choice" in
         exit
         ;;
     *)
+        echo -e "${yellow}********************${rest}"
         echo "Invalid choice. Please select a valid option."
         ;;
 esac
