@@ -211,6 +211,7 @@ add_sites() {
     config_file="/root/smartSNI/config.json"
 
     if [ -d "/root/smartSNI" ]; then
+        echo -e "${yellow}********************${rest}"
         read -p "Enter additional Websites (separated by commas):" additional_sites
         IFS=',' read -ra new_sites <<< "$additional_sites"
 
@@ -219,6 +220,7 @@ add_sites() {
             if [[ ! " ${current_domains[@]} " =~ " $site " ]]; then
                 jq ".domains += {\"$site\": \"$myip\"}" "$config_file" > temp_config.json
                 mv temp_config.json "$config_file"
+                echo -e "${yellow}********************${rest}"
                 echo -e "${green}Domain ${cyan}'$site'${green} added successfully.${rest}"
             else
                 echo -e "${yellow}Domain ${cyan}'$site' already exists.${rest}"
@@ -227,7 +229,6 @@ add_sites() {
 
         # Restart the service
         systemctl restart sni.service
-        echo -e "${green}SNI service restarted.${rest}"
     else
         echo -e "${red}Error: Not installed. Please Install first.${rest}"
     fi
@@ -249,15 +250,16 @@ remove_sites() {
             if jq -e --arg selected_domain "$selected_domain" '.domains | has($selected_domain)' "$config_file" > /dev/null; then
                 jq "del(.domains[\"$selected_domain\"])" "$config_file" > temp_config.json
                 mv temp_config.json "$config_file"
+                echo -e "${yellow}********************${rest}"
                 echo -e "${green}Domain ${cyan}'$selected_domain'${green} removed successfully.${rest}"
             else
+                echo -e "${yellow}********************${rest}"
                 echo -e "${yellow}Domain ${cyan}'$selected_domain'${yellow} not found.${rest}"
             fi
         done
 
         # Restart the service
         systemctl restart sni.service
-        echo -e "${green}SNI service restarted.${rest}"
     else
         echo -e "${red}Error: Not installed. Please Install first.${rest}"
     fi
@@ -265,6 +267,7 @@ remove_sites() {
 
 clear
 echo -e "${cyan}By --> Peyman * Github.com/Ptechgithub * ${rest}"
+echo ""
 check
 echo -e "${purple}*******************${rest}"
 echo -e "${purple}* ${green}SMART SNI PROXY${purple} *${rest}"
