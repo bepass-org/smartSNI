@@ -59,8 +59,8 @@ install_go() {
     ARCH=$(dpkg --print-architecture)
     
     if [[ $ARCH == "amd64" || $ARCH == "arm64" ]]; then
-        wget https://go.dev/dl/go1.21.6.linux-"$ARCH".tar.gz
-        rm -rf /usr/local/go && rm -rf /usr/local/bin/go && tar -C /usr/local -xzf go1.21.6.linux-"$ARCH".tar.gz
+        wget https://go.dev/dl/go1.22.1.linux-"$ARCH".tar.gz
+        rm -rf /usr/local/go && rm -rf /usr/local/bin/go && tar -C /usr/local -xzf go1.22.1.linux-"$ARCH".tar.gz
         export PATH=$PATH:/usr/local/go/bin
         cp /usr/local/go/bin/go /usr/local/bin
         
