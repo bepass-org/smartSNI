@@ -64,7 +64,7 @@ install_go() {
         export PATH=$PATH:/usr/local/go/bin
         cp /usr/local/go/bin/go /usr/local/bin
         
-        rm go1.21.6.linux-"$ARCH".tar.gz
+        rm go1.22.1.linux-"$ARCH".tar.gz
         rm -rf /root/go
         echo -e "${cyan}Go has been installed.${rest}"
     else
