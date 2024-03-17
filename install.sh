@@ -150,6 +150,9 @@ EOL
             echo -e "${yellow}_______________________________________${rest}"
             echo -e "${green}Service Installed Successfully and activated.${rest}"
             echo -e "${yellow}_______________________________________${rest}"
+            echo ""
+            echo -e "${cyan}DOH --> https://$domain/dns-query${rest}"
+            echo -e "${yellow}_______________________________________${rest}"
         else
             echo -e "${yellow}____________________________${rest}"
             echo -e "${red}Service is not active.${rest}"
