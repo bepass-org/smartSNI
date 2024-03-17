@@ -168,7 +168,7 @@ uninstall() {
     fi
     # Stop and disable the service
     sudo systemctl stop sni.service
-    sudo systemctl disable sni.service
+    sudo systemctl disable sni.service 2>/dev/null
 
     # Remove service file
     sudo rm /etc/systemd/system/sni.service
