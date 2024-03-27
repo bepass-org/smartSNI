@@ -1,7 +1,17 @@
 #!/bin/bash
 
+#colors
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+blue='\033[0;34m'
+purple='\033[0;35m'
+cyan='\033[0;36m'
+rest='\033[0m'
+myip=$(hostname -I | awk '{print $1}')
+
+# Function to detect Linux distribution
 detect_distribution() {
-    # Detect the Linux distribution
     local supported_distributions=("ubuntu" "debian" "centos" "fedora")
     
     if [ -f /etc/os-release ]; then
@@ -24,37 +34,62 @@ detect_distribution() {
 install_dependencies() {
     detect_distribution
     $pm update -y
-    local packages=("nginx" "git" "jq" "certbot" "python3-certbot-nginx" "snapd")
+    local packages=("nginx" "git" "jq" "certbot" "python3-certbot-nginx" "wget" "tar")
     
     for package in "${packages[@]}"; do
         if ! dpkg -s "$package" &> /dev/null; then
-            echo "$package is not installed. Installing..."
+            echo -e "${yellow}$package is not installed. Installing...${rest}"
             $pm install -y "$package"
         else
-            echo "$package is already installed."
+            echo -e "${green}$package is already installed.${rest}"
         fi
     done
     
-    if ! snap list go &> /dev/null; then
-        echo "go is not installed. Installing..."
-        snap install go --classic
+    if ! command -v go &> /dev/null; then
+        install_go
     else
-        echo "go is already installed."
+        echo -e "${green}go is already installed.${rest}"
     fi
 }
 
-#install
+# Install Go
+install_go() {
+    echo -e "${yellow}go is not installed. Installing...${rest}"
+    
+    ARCH=$(dpkg --print-architecture)
+    
+    if [[ $ARCH == "amd64" || $ARCH == "arm64" ]]; then
+        wget https://go.dev/dl/go1.21.1.linux-"$ARCH".tar.gz
+        rm -rf /usr/local/go && rm -rf /usr/local/bin/go && tar -C /usr/local -xzf go1.21.1.linux-"$ARCH".tar.gz
+        export PATH=$PATH:/usr/local/go/bin
+        cp /usr/local/go/bin/go /usr/local/bin
+        
+        rm go1.21.1.linux-"$ARCH".tar.gz
+        rm -rf /root/go
+        echo -e "${cyan}Go has been installed.${rest}"
+    else
+        echo -e "${red}Unsupported architecture: $ARCH${rest}"
+        exit 1
+    fi
+}
+
+# install SNI service
 install() {
     if systemctl is-active --quiet sni.service; then
-        echo "The SNI service is already installed and active."
+        echo -e "${yellow}********************${rest}"
+        echo -e "${green}Service is already installed and active.${rest}"
+        echo -e "${yellow}********************${rest}"
     else
         install_dependencies
-        myip=$(hostname -I | awk '{print $1}')
         git clone https://github.com/bepass-org/smartSNI.git /root/smartSNI
-
+         
+        sleep 1
         clear
+        echo -e "${yellow}********************${rest}"
         read -p "Enter your domain: " domain
-        read -p "Enter the domain names separated by commas (example: google,youtube): " site_list
+        echo -e "${yellow}********************${rest}"
+        read -p "Enter Website names (separated by commas)[example: intel.com,youtube]: " site_list
+        echo -e "${yellow}********************${rest}"
         # Split the input into an array
         IFS=',' read -ra sites <<< "$site_list"
         
@@ -81,10 +116,7 @@ install() {
         # Obtain SSL certificates
         certbot --nginx -d $domain --register-unsafely-without-email --non-interactive --agree-tos --redirect
 
-        # Copy config
         sudo cp /root/smartSNI/nginx.conf "$nginx_conf"
-
-        # Stop and restart nginx
         systemctl stop nginx
         systemctl restart nginx
 
@@ -101,7 +133,7 @@ Description=Smart SNI Service
 [Service]
 User=root
 WorkingDirectory=/root/smartSNI
-ExecStart=/snap/bin/go run main.go
+ExecStart=/usr/local/go/bin/go run /root/smartSNI/main.go
 Restart=always
 
 [Install]
@@ -115,62 +147,151 @@ EOL
 
         # Check if the service is active
         if systemctl is-active --quiet sni.service; then
-            echo "The SNI service is now active."
+            echo -e "${yellow}_______________________________________${rest}"
+            echo -e "${green}Service Installed Successfully and activated.${rest}"
+            echo -e "${yellow}_______________________________________${rest}"
+            echo ""
+            echo -e "${cyan}DOH --> https://$domain/dns-query${rest}"
+            echo -e "${yellow}_______________________________________${rest}"
         else
-            echo "The SNI service is not active."
+            echo -e "${yellow}____________________________${rest}"
+            echo -e "${red}Service is not active.${rest}"
+            echo -e "${yellow}____________________________${rest}"
         fi
     fi
 }
 
 # Uninstall function
 uninstall() {
-    # Check if the service is installed
     if [ ! -f "/etc/systemd/system/sni.service" ]; then
-        echo "The service is not installed."
+        echo -e "${yellow}____________________________${rest}"
+        echo -e "${red}The service is not installed.${rest}"
+        echo -e "${yellow}____________________________${rest}"
         return
     fi
     # Stop and disable the service
     sudo systemctl stop sni.service
-    sudo systemctl disable sni.service
+    sudo systemctl disable sni.service 2>/dev/null
 
     # Remove service file
     sudo rm /etc/systemd/system/sni.service
-    echo "Uninstallation completed successfully."
+    rm -rf /root/smartSNI
+    rm -rf /root/go
+    echo -e "${yellow}____________________________________${rest}"
+    echo -e "${green}Uninstallation completed successfully.${rest}"
+    echo -e "${yellow}____________________________________${rest}"
 }
 
+# Show Websites
 display_sites() {
     config_file="/root/smartSNI/config.json"
 
     if [ -d "/root/smartSNI" ]; then
-        echo "Current list of sites in $config_file:"
-        echo "---------------------"
-        jq -r '.domains | keys[]' "$config_file"
-        echo "---------------------"
+        echo -e "${yellow}****${cyan} [Websites] ${yellow}****${rest}"
+        # Initialize a counter
+        counter=1
+        # Loop through the domains and display with numbering
+        jq -r '.domains | keys_unsorted | .[]' "$config_file" | while read -r domain; do
+            echo "$counter) $domain"
+            ((counter++))
+        done
+        echo ""
+        echo -e "${yellow}********************${rest}"
     else
-        echo "Error: smartSNI directory not found. Please Install first."
+        echo -e "${yellow}********************${rest}"
+        echo -e "${red}Not installed. Please Install first.${rest}"
     fi
 }
 
+# Check service
 check() {
     if systemctl is-active --quiet sni.service; then
-        echo "[Service Is Active]"
+        echo -e "${cyan}[Service Actived]${rest}"
     else
-        echo "[Service Is Not active]"
+        echo -e "${yellow}[Service Not Active]${rest}"
     fi
 }
 
+# Add sites
+add_sites() {
+    config_file="/root/smartSNI/config.json"
+
+    if [ -d "/root/smartSNI" ]; then
+        echo -e "${yellow}********************${rest}"
+        read -p "Enter additional Websites (separated by commas):" additional_sites
+        IFS=',' read -ra new_sites <<< "$additional_sites"
+
+        current_domains=$(jq -r '.domains | keys_unsorted | .[]' "$config_file")
+        for site in "${new_sites[@]}"; do
+            if [[ ! " ${current_domains[@]} " =~ " $site " ]]; then
+                jq ".domains += {\"$site\": \"$myip\"}" "$config_file" > temp_config.json
+                mv temp_config.json "$config_file"
+                echo -e "${yellow}********************${rest}"
+                echo -e "${green}Domain ${cyan}'$site'${green} added successfully.${rest}"
+            else
+                echo -e "${yellow}Domain ${cyan}'$site' already exists.${rest}"
+            fi
+        done
+
+        # Restart the service
+        systemctl restart sni.service
+    else
+        echo -e "${yellow}********************${rest}"
+        echo -e "${red}Not installed. Please Install first.${rest}"
+    fi
+}
+
+# Remove sites
+remove_sites() {
+    config_file="/root/smartSNI/config.json"
+
+    if [ -d "/root/smartSNI" ]; then
+        # Display available sites
+        display_sites
+        
+        read -p "Enter Websites names to remove (separated by commas): " domains_to_remove
+        IFS=',' read -ra selected_domains <<< "$domains_to_remove"
+
+        # Remove selected domains from JSON
+        for selected_domain in "${selected_domains[@]}"; do
+            if jq -e --arg selected_domain "$selected_domain" '.domains | has($selected_domain)' "$config_file" > /dev/null; then
+                jq "del(.domains[\"$selected_domain\"])" "$config_file" > temp_config.json
+                mv temp_config.json "$config_file"
+                echo -e "${yellow}********************${rest}"
+                echo -e "${green}Domain ${cyan}'$selected_domain'${green} removed successfully.${rest}"
+            else
+                echo -e "${yellow}********************${rest}"
+                echo -e "${yellow}Domain ${cyan}'$selected_domain'${yellow} not found.${rest}"
+            fi
+        done
+
+        # Restart the service
+        systemctl restart sni.service
+    else
+        echo -e "${yellow}********************${rest}"
+        echo -e "${red}Not installed. Please Install first.${rest}"
+    fi
+}
 
 clear
-echo "By --> Peyman * Github.com/Ptechgithub * "
-echo "--*-* SMART SNI PROXY *-*--"
+echo -e "${cyan}By --> Peyman * Github.com/Ptechgithub * ${rest}"
 echo ""
-echo "Select an option:"
-echo "1) Install"
-echo "2) Uninstall"
-echo "---------------------------"
-echo "3) Show Sites"
-echo "0) Exit"
-echo "----$(check)----"
+check
+echo -e "${purple}*******************${rest}"
+echo -e "${purple}* ${green}SMART SNI PROXY${purple} *${rest}"
+echo -e "${purple}*******************${rest}"
+echo -e "${yellow}1] ${green}Install${rest}        ${purple}*"
+echo -e "${purple}                  * "
+echo -e "${yellow}2] ${green}Uninstall${rest}      ${purple}*"
+echo -e "${purple}                  * "
+echo -e "${yellow}3] ${green}Show Websites ${rest} ${purple}*"
+echo -e "${purple}                  * "
+echo -e "${yellow}4] ${green}Add Sites${rest}      ${purple}*"
+echo -e "${purple}                  * "
+echo -e "${yellow}5] ${green}Remove Sites${rest}   ${purple}*"
+echo -e "${purple}                  * "
+echo -e "${red}0${yellow}] ${purple}Exit${rest}${purple}           *"
+echo -e "${purple}*******************${rest}"
 read -p "Enter your choice: " choice
 case "$choice" in
     1)
@@ -179,13 +300,21 @@ case "$choice" in
     2)
         uninstall
         ;;
-     3) 
+    3) 
         display_sites
         ;;
-    0)   
+    4) 
+        add_sites
+        ;;
+    5)
+        remove_sites
+        ;;
+    0)
+        echo -e "${cyan}By 🖐${rest}"
         exit
         ;;
     *)
+        echo -e "${yellow}********************${rest}"
         echo "Invalid choice. Please select a valid option."
         ;;
 esac
